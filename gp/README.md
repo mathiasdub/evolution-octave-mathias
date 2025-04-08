@@ -12,6 +12,9 @@ In this tutorial, we discuss the evolution of programs, graphs, and networks, go
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/d9w/evolution/blob/master/gp/symbolic_regression.ipynb)
 
+[Linear GP notebook](https://github.com/d9w/evolution/blob/master/gp/LinearGeneticProgramming.ipynb)
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/d9w/evolution/blob/master/gp/LinearGeneticProgramming.ipynb)
 
 Videos
 
