@@ -1,15 +1,18 @@
 # Project - Evolution of agents
 
-This project focuses on the evolution of agents using the [Evolution Gym](https://evolutiongym.github.io/Evolution Gym) suite. To get started
-with evogym, see the [documentation](https://evolutiongym.github.io/).
+This project focuses on the evolution of agents using the [EvoGym](https://evolutiongym.github.io) suite. To get started
+with evogym, see the [documentation](https://evolutiongym.github.io/documentation).
 
 [Neuroevolution in evogym notebook](https://github.com/d9w/evolution/blob/master/project/evogym.ipynb)
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/d9w/evolution/blob/master/project/evogym.ipynb)
 
-[Notebook for gifs](https://github.com/d9w/evolution/blob/master/project/video/gif.ipynb)
+[Notebook for gifs](https://github.com/d9w/evolution/blob/master/project/gif.ipynb)
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/d9w/evolution/blob/master/project/video/gif.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/d9w/evolution/blob/master/project/gif.ipynb)
+
+
+For this project, you'll run the code locally. To build the minimal environment for this project, you'll find the necessary information in this [file](https://github.com/d9w/evolution/blob/master/project/setup_env.md).
 
 You will need to evolve movement policies for three tasks independently:
 
