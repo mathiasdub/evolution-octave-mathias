@@ -2,17 +2,9 @@ from importations import *
 from agent import *
 
 
-walker = np.array([
-    [3, 3, 3, 3, 3],
-    [3, 3, 3, 0, 3],
-    [3, 3, 0, 3, 3],
-    [3, 3, 0, 3, 3],
-    [3, 3, 0, 3, 3]
-    ])
 
 
-
-def make_env(env_name, seed=None, robot=None, **kwargs):
+def make_env(env_name, robot, seed=None, **kwargs):
     if robot is None: 
         env = gym.make(env_name)
     else:
@@ -25,7 +17,7 @@ def make_env(env_name, seed=None, robot=None, **kwargs):
     return env
 
 
-def evaluate(agent, env, max_steps=500, render=False):
+def evaluate(agent, env, max_steps=498, render=False):
     obs, i = env.reset()
     agent.model.reset()
     reward = 0
@@ -41,8 +33,8 @@ def evaluate(agent, env, max_steps=500, render=False):
     return reward
 
 
-def get_cfg(env_name, robot=None):
-    env = make_env(env_name, robot=walker)
+def get_cfg(env_name, robot):
+    env = make_env(env_name, robot)
     cfg = {
         "n_in": env.observation_space.shape[0],
         "h_size": 32,
@@ -52,24 +44,7 @@ def get_cfg(env_name, robot=None):
     return cfg
 
 
-env_name = 'Walker-v0'
-robot = walker
 
-cfg = get_cfg(env_name, robot)
-a = Agent(Network, cfg)
-a
-
-
-env = make_env(env_name, robot=walker)
-s = env.reset()
-len(s), s
-
-
-# Evaluation
-env = make_env(env_name, robot=walker)
-reward = evaluate(a, env, render=True)
-print(f"Reward: {reward}")
-env.close()
 
 
 def mp_eval(a, cfg):

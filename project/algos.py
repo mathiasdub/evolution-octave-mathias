@@ -7,15 +7,15 @@ from environment import *
 
 from copy import deepcopy
 import ray
+"""
 @ray.remote
 
 def ray_mp_eval(a, cfg):
     return mp_eval(deepcopy(a), cfg)
 
+ray.init()
 
-import ray
-#ray.init()
-ray.init(ignore_reinit_error=True, local_mode=True)
+ray.init(ignore_reinit_error=True, local_mode=True)"""
 
 
 def one_plus_lambda(config):
@@ -58,22 +58,6 @@ def one_plus_lambda(config):
 
 
 
-config = {
-    "env_name": "Walker-v0",
-    "robot": walker,
-    "generations": 10, # To change: increase!
-    "lambda": 10,
-    "max_steps": 100, # to change to 500
-}
-
-a = one_plus_lambda(config)
-a.fitness
-
-
-
-env = make_env(config["env_name"], robot=config["robot"])
-evaluate(a, env, render=False)
-env.close()
 
 
 
@@ -143,57 +127,6 @@ def ES(config):
     plt.show()
     return elite
 
-
-config = {    "env_name": "Walker-v0",
-    "robot": walker,
-    "generations": 500, # to change: increase!
-    "lambda": 20, # Population size
-    "mu": 5, # Parents pop size
-    "sigma": 0.1, # mutation std
-    "lr": 1, # Learning rate
-    "max_steps": 200, # to change to 500
-}
-
-a = ES(config)
-a.fitness
-
-
-
-env = make_env(config["env_name"], robot=config["robot"])
-evaluate(a, env, render=False)
-env.close()
-
-np.save("Walker.npy", a.genes)
-
-
-
-# load weights
-
-config = {
-    "env_name": "Walker-v0",
-    "robot": walker,
-    "generations": 100,
-    "lambda": 10, # Population size
-    "mu": 5, # Parents pop size
-    "sigma": 0.1, # mutation std
-    "lr": 1, # Learning rate
-    "max_steps": 500,
-}
-
-cfg = get_cfg(config["env_name"], robot=config["robot"]) # Get network dims
-cfg = {**config, **cfg} # Merge configs
-a = Agent(Network, cfg)
-a.genes = np.load("Walker.npy")
-
-
-env = make_env(cfg["env_name"], robot=cfg["robot"])
-a.fitness = evaluate(a, env, render=False)
-env.close()
-print(a.fitness)
-
-
-
-import json
 def save_solution(a, cfg, name="solution.json"):
     save_cfg = {}
     for i in ["env_name", "robot", "n_in", "h_size", "n_out"]:
@@ -207,11 +140,6 @@ def save_solution(a, cfg, name="solution.json"):
         json.dump(save_cfg, f)
     return save_cfg
 
-
-save_solution(a, cfg)
-
-
-
 def load_solution(name="solution.json"):
     with open(name, "r") as f:
         cfg = json.load(f)
@@ -220,12 +148,3 @@ def load_solution(name="solution.json"):
     a = Agent(Network, cfg, genes=cfg["genes"])
     a.fitness = cfg["fitness"]
     return a
-
-
-
-a = load_solution(name="solution.json")
-cfg = a.config
-env = make_env(cfg["env_name"], robot=cfg["robot"])
-a.fitness = evaluate(a, env, render=False)
-env.close()
-print(a.fitness)
