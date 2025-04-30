@@ -148,3 +148,49 @@ def load_solution(name="solution.json"):
     a = Agent(Network, cfg, genes=cfg["genes"])
     a.fitness = cfg["fitness"]
     return a
+
+
+def CMA_ES(config):
+    cfg = get_cfg(config["env_name"], robot=config["robot"])  # Get network dims
+    cfg = {**config, **cfg}  # Merge configs
+
+    env = make_env(cfg["env_name"], robot=cfg["robot"])
+    agent = Agent(Network, cfg)
+    theta = agent.genes  # initial parameters
+
+    es = cma.CMAEvolutionStrategy(theta, cfg["sigma"], {
+        'popsize': cfg["lambda"]
+    })
+
+    fits = []
+    total_evals = []
+
+    bar = tqdm(range(cfg["generations"]))
+    for gen in bar:
+        solutions = es.ask()
+        fitnesses = []
+        for genes in solutions:
+            a = Agent(Network, cfg, genes=genes)
+            f = evaluate(a, env, max_steps=cfg["max_steps"])
+            fitnesses.append(-f)  # CMA-ES minimizes, so we negate
+
+        es.tell(solutions, fitnesses)
+        best_idx = np.argmin(fitnesses)
+        best_fitness = -fitnesses[best_idx]
+        best_genes = solutions[best_idx]
+
+        if agent.fitness is None or best_fitness > agent.fitness:
+            agent.genes = best_genes
+            agent.fitness = best_fitness
+
+        fits.append(agent.fitness)
+        total_evals.append(cfg["lambda"] * (gen + 1))
+        bar.set_description(f"Best: {agent.fitness}")
+
+    env.close()
+    plt.plot(total_evals, fits)
+    plt.xlabel("Evaluations")
+    plt.ylabel("Fitness")
+    plt.title("CMA-ES Progress")
+    plt.show()
+    return agent

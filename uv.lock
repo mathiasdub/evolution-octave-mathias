@@ -195,6 +195,18 @@ wheels = [
 ]
 
 [[package]]
+name = "cma"
+version = "4.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e0/1c/30d758218cf4cff61f3ab71eb25230193e689454c4807ddb2702cb40ce53/cma-4.0.0.tar.gz", hash = "sha256:fd28ce56983bf2fca0e614189d60134ebb80bf604f070d1ea095ea4e856f13a5", size = 276938, upload_time = "2024-09-03T07:46:12.096Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/49/10/328172e7c8bf498c826a6d53646781afac0f7e647c82835ba5c8dbb3957d/cma-4.0.0-py3-none-any.whl", hash = "sha256:97b86ba1ac9f1cbb189a06c4d4a78f591f0878e5dd3e55c95e88e622e78c1a10", size = 283504, upload_time = "2024-09-03T07:46:08.127Z" },
+]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -350,6 +362,7 @@ name = "evolution-octave-mathias"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "cma" },
     { name = "evogym" },
     { name = "imageio" },
     { name = "ipykernel" },
@@ -363,6 +376,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cma", specifier = ">=4.0.0" },
     { name = "evogym", specifier = ">=2.0.0" },
     { name = "imageio", specifier = ">=2.37.0" },
     { name = "ipykernel", specifier = ">=6.29.5" },

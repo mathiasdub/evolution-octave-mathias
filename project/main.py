@@ -1,6 +1,8 @@
 from  algos import*
-algo='one_plus_lambda'
+#algo='one_plus_lambda'
 #algo="ES"
+algo="CMA_ES"
+
 walker = np.array([
     [3, 3, 3, 3, 3],
     [3, 3, 3, 0, 3],
@@ -8,16 +10,21 @@ walker = np.array([
     [3, 3, 0, 3, 3],
     [3, 3, 0, 3, 3]
     ])
+
+
 if algo=='one_plus_lambda':
     config = {
         "env_name": "Walker-v0",
         "robot": walker,
-        "generations": 10, # To change: increase!
+        "generations": 100, # To change: increase!
         "lambda": 10,
         "max_steps": 100, # to change to 500
     }
+    cfg = get_cfg(config["env_name"], robot=config["robot"]) # Get network dims
+    cfg = {**config, **cfg} # Merge configs
 
     a = one_plus_lambda(config)
+    save_solution(a, cfg)
     a.fitness
 
 
@@ -25,6 +32,8 @@ if algo=='one_plus_lambda':
     env = make_env(env_name=config["env_name"], robot=config["robot"])
     evaluate(a, env, render=False)
     env.close()
+    
+    
 if algo=="ES":
     config = {    "env_name": "Walker-v0",
         "robot": walker,
@@ -35,8 +44,11 @@ if algo=="ES":
         "lr": 1, # Learning rate
         "max_steps": 200, # to change to 500
     }
+    cfg = get_cfg(config["env_name"], robot=config["robot"]) # Get network dims
+    cfg = {**config, **cfg} # Merge configs
 
     a = ES(config)
+    save_solution(a, cfg)
     a.fitness
 
 
@@ -45,9 +57,30 @@ if algo=="ES":
     evaluate(a, env, render=False)
     env.close()
 
+
+if algo == "CMA_ES":
+    config = {
+        "env_name": "Walker-v0",
+        "robot": walker,
+        "generations": 10,
+        "lambda": 10,  # CMA-ES population size
+        "sigma": 0.5,  # Initial mutation std
+        "max_steps": 500,
+    }
+    cfg = get_cfg(config["env_name"], robot=config["robot"])
+    cfg = {**config, **cfg}
+
+    a = CMA_ES(config)
+    save_solution(a, cfg)
+
+    env = make_env(config["env_name"], robot=config["robot"])
+    evaluate(a, env, render=False)
+    env.close()
+
+
+
+
 np.save("Walker.npy", a.genes)
-
-
 
 # load weights
 
@@ -62,8 +95,7 @@ config = {
     "max_steps": 497,
 }
 
-cfg = get_cfg(config["env_name"], robot=config["robot"]) # Get network dims
-cfg = {**config, **cfg} # Merge configs
+
 a = Agent(Network, cfg)
 a.genes = np.load("Walker.npy")
 
