@@ -92,3 +92,8 @@ class Agent:
             x = torch.tensor(obs).double().unsqueeze(0).to(self.device)
             actions = self.model(x).cpu().detach().numpy()
         return actions
+    
+    def descriptor(self, trajectory):
+        #moyenne et variance de l'action
+        actions = np.array(trajectory)
+        return np.mean(actions), np.std(actions)

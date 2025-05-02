@@ -8,9 +8,9 @@ import sys
 
 #algo='one_plus_lambda'
 #algo="ES"
-algo="CMA_ES"
+#algo="CMA_ES"
 #algo="MAP_Elites"
-
+algo = "MAP_ELITES_PYRIBS"
 walker = np.array([
     [3, 3, 3, 3, 3],
     [3, 0, 0, 0, 3],
@@ -69,16 +69,16 @@ if algo == "CMA_ES":
     config = {
         "env_name": "Walker-v0",
         "robot": walker,
-        "generations": 50,
-        "lambda":30,  # CMA-ES population size
+        "generations": 200,
+        "lambda":10,  # CMA-ES population size
         "sigma": 3,  # Initial mutation std
         "max_steps": 500,
     }
     cfg = get_cfg(config["env_name"], robot=config["robot"])
     cfg = {**config, **cfg}
 
-    a = CMA_ES(config)
-    save_solution(a, cfg,"solution_avec_para_50,30,3.json")
+    a = CMA_ES_sans_para(config)
+    save_solution(a, cfg,"solution_avec_para_50,3,3.json")
     a.fitness
     
     env = make_env(config["env_name"], robot=config["robot"])
@@ -86,21 +86,41 @@ if algo == "CMA_ES":
     env.close()
 
 
-"""if algo == "MAP_Elites":
+if algo == "MAP_Elites":
     config = {
         "env_name": "Walker-v0",
         "robot": walker,
-        "generations": 10,
-        "lambda": 5,  # nombre de solutions par génération
-        "sigma": 0.5,
+        "generations": 200,
+        "lambda":10,
         "max_steps": 500,
     }
     cfg = get_cfg(config["env_name"], robot=config["robot"])
     cfg = {**config, **cfg}
+    n_iter = config["generations"] * config["lambda"]
 
-    a = MAP_Elites(config)
-    save_solution(a, cfg, name="solution_map_elites.json")
 
-    env = make_env(cfg["env_name"], robot=cfg["robot"])
+    a = map_elites(config, n_bins=20, n_init=100, n_iter=n_iter)
+    save_solution(a, cfg, "solution_map_elites.json")
+
+    print("Best fitness from MAP-Elites:", a.fitness)
+
+    env = make_env(config["env_name"], robot=config["robot"])
     evaluate(a, env, render=False)
-    env.close()"""
+    env.close()
+
+
+if algo == "MAP_ELITES_PYRIBS":
+    config = {
+        "env_name": "Walker-v0",
+        "robot": walker,
+        "generations": 200,
+        "lambda": 10,
+        "sigma": 3,
+        "max_steps": 500,
+    }
+
+    a = map_elites_pyribs(config)
+    save_solution(a, config, "solution_map_elites_pyribs.json")
+    env = make_env(config["env_name"], robot=config["robot"])
+    evaluate(a, env, render=False)
+    env.close()

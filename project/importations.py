@@ -15,7 +15,5 @@ import cma as cma
 import imageio
 import ray
 import os
-
-"""from ribs.archives import GridArchive
+from ribs.archives import CVTArchive
 from ribs.emitters import GaussianEmitter
-"""

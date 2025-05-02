@@ -59,3 +59,25 @@ def mp_eval(a, cfg):
     env.close()
     return fit
 
+def evaluate_with_traj(agent, env, max_steps=500,render=False):
+    obs, _ = env.reset()
+    agent.model.reset()
+    reward = 0
+    steps = 0
+    done = False
+    trajectory = []
+    if render:
+        imgs = []
+    while not done and steps < max_steps:
+        if render:
+            img=env.render()
+            imgs.append(img)
+
+        action = agent.act(obs)
+        trajectory.append(action)
+        obs, r, done, trunc, _ = env.step(action)
+        reward += r
+        steps += 1
+    if render:
+        return reward,trajectory,imgs
+    return reward, trajectory
