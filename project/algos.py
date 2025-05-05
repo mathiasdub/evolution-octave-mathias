@@ -245,300 +245,455 @@ def CMA_ES_sans_para(config):
     
 #--------------------------------------------------------------------------------------#
 
-def map_elites(config, n_bins=10, n_init=100, n_iter=500):
+from ribs.archives import GridArchive
+from ribs.emitters import EvolutionStrategyEmitter
+
+def walker_descriptors(agent, env, max_steps=500):
+    """Calcule les descripteurs pour un agent walker: distance parcourue et hauteur moyenne"""
+    obs, _ = env.reset()
+    agent.model.reset()
+    total_reward = 0
+    done = False
+    steps = 0
+    heights = []
+    x_positions = []
+    
+    while not done and steps < max_steps:
+        action = agent.act(obs)
+        obs, r, done, trunc, info = env.step(action)
+        total_reward += r
+        
+        # Extrait la position x et la hauteur depuis info
+        # Adapté pour le walker dans Evolution Gym
+        if "robot_com" in info:
+            x_positions.append(info["robot_com"][0])
+            heights.append(info["robot_com"][1])
+        steps += 1
+    
+    x_distance = max(x_positions) - min(x_positions) if x_positions else 0
+    mean_height = np.mean(heights) if heights else 0
+    
+    return np.array([x_distance, mean_height]), total_reward
+
+def map_elites_sans_para(config):
+    """Implémentation de MAP-Elites sans utiliser l'optimiseur de pyribs"""
     cfg = get_cfg(config["env_name"], robot=config["robot"])
     cfg = {**config, **cfg}
+    
     env = make_env(cfg["env_name"], robot=cfg["robot"])
     
-    # Define grid for behavior descriptors
-    grid = {}
-    archive = {}
+    # Dimensions des descripteurs
+    x_bounds = (0, 10)  # Distance parcourue
+    h_bounds = (0, 2)   # Hauteur moyenne
     
-    def get_cell(desc):
-        # Normalise descriptor (ex: mean action in [0.6, 1.6] if output ~sigmoid + 0.6)
-        # Then map to bins
-        d1, d2 = desc
-        b1 = int(np.clip((d1 - 0.6) / 1.0 * n_bins, 0, n_bins - 1))
-        b2 = int(np.clip((d2) / 1.0 * n_bins, 0, n_bins - 1))
-        return (b1, b2)
-
-    # Initial random agents
-    for _ in range(n_init):
-        agent = Agent(Network, cfg)
-        fitness, trajectory = evaluate_with_traj(agent, env, max_steps=cfg["max_steps"])
-        desc = agent.descriptor(trajectory)
-        cell = get_cell(desc)
-        if cell not in archive or archive[cell].fitness < fitness:
-            agent.fitness = fitness
-            archive[cell] = agent
-            grid[cell] = fitness
-
-    # Evolution loop
-    for i in tqdm(range(n_iter)):
-        if len(archive) == 0:
-            continue
-        # Select random elite
-        parent = np.random.choice(list(archive.values()))
-        child_genes = parent.mutate_ga()
-        child = Agent(Network, cfg, genes=child_genes)
-        fitness, trajectory = evaluate_with_traj(child, env, max_steps=cfg["max_steps"],render=False)
-        desc = child.descriptor(trajectory)
-        cell = get_cell(desc)
-        if cell not in archive or archive[cell].fitness < fitness:
-            child.fitness = fitness
-            archive[cell] = child
-            grid[cell] = fitness
-
-    # Optional: Visualisation
-    fitness_map = np.zeros((n_bins, n_bins))
-    for (i, j), f in grid.items():
-        fitness_map[i, j] = f
-    plt.imshow(fitness_map, origin='lower')
-    plt.colorbar(label="Fitness")
-    plt.title("MAP-Elites Grid")
-    plt.xlabel("Descriptor 1")
-    plt.ylabel("Descriptor 2")
-    plt.show()
-
-    env.close()
-    best_cell = max(archive.items(), key=lambda x: x[1].fitness)
-    best_agent = best_cell[1]
-    return best_agent
-
-
-
-#--------------------------------------------------------------------------------------#
-
-def extract_descriptor(obs_start, obs_end):
-    # Descripteur : distance horizontale (position x)
-    x0 = obs_start[0]
-    x1 = obs_end[0]
-    distance = x1 - x0
-    return [distance]
-
-
-def map_elites_pyribs(config):
-    cfg = get_cfg(config["env_name"], robot=config["robot"])
-    cfg = {**config, **cfg}
-
-    sol_dim = len(Agent(Network, cfg).genes)
-
-    # Archive avec 1 seul descripteur : la distance
-    archive = CVTArchive(
-        solution_dim=sol_dim,
-        cells=100,  # 100 cellules
-        ranges=[(0, 5)],  # distance de 0 à 5
-        samples=10000,
+    # Initialisation de l'agent et récupération de la taille du génome
+    initial_agent = Agent(Network, cfg)
+    solution_dim = len(initial_agent.genes)
+    
+    # Création de l'archive
+    archive = GridArchive(
+        solution_dim=solution_dim,
+        dims=[20, 20],
+        ranges=[x_bounds, h_bounds]
     )
-
-    emitter = GaussianEmitter(
+    
+    # Emetteur pour générer de nouvelles solutions
+    emitter = EvolutionStrategyEmitter(
         archive,
-        x0=Agent(Network, cfg).genes,
-        sigma=cfg["sigma"],
-        batch_size=cfg["lambda"],
+        x0=initial_agent.genes,
+        sigma0=cfg["sigma"],
+        batch_size=cfg["lambda"]
     )
-
-    best_fitness = -np.inf
-    best_genes = None
+    
+    # Meilleur agent trouvé
+    best_agent = Agent(Network, cfg)
+    best_agent.fitness = float("-inf")
+    
     fits = []
     total_evals = []
-
-    for gen in tqdm(range(cfg["generations"]), desc="MAP-Elites"):
+    
+    bar = tqdm(range(cfg["generations"]), desc="MAP-Elites")
+    for gen in bar:
+        # Générer de nouvelles solutions
         solutions = emitter.ask()
+        
+        # Évaluer chaque solution
         objectives = []
         descriptors = []
-
         for genes in solutions:
-            agent = Agent(Network, cfg, genes=genes)
-            env = make_env(cfg["env_name"], robot=cfg["robot"])
-            obs_start, _ = env.reset()
-            obs = obs_start
-            reward = 0
-            steps = 0
-            done = False
-
-            while not done and steps < cfg["max_steps"]:
-                action = agent.act(obs)
-                obs, r, done, trunc, _ = env.step(action)
-                reward += r
-                steps += 1
-            env.close()
-
-            desc = extract_descriptor(obs_start, obs)
-            objectives.append(reward)
+            a = Agent(Network, cfg, genes=genes)
+            desc, fitness = walker_descriptors(a, env, max_steps=cfg["max_steps"])
+            objectives.append(fitness)
             descriptors.append(desc)
-
-            if reward > best_fitness:
-                best_fitness = reward
-                best_genes = genes
-
-        archive.add(solutions, objectives, descriptors)
-        add_info = [{} for _ in solutions]
-        emitter.tell(solutions, objectives, descriptors, add_info)
-
-        fits.append(best_fitness)
+            
+            # Garder trace du meilleur agent
+            if fitness > best_agent.fitness:
+                best_agent.genes = genes.copy()
+                best_agent.fitness = fitness
+        
+        # Mettre à jour l'archive
+        for i, (solution, objective, desc) in enumerate(zip(solutions, objectives, descriptors)):
+            archive.add(solution, objective, desc)
+        
+        # Informer l'emitter des résultats (sans utiliser optimizer.tell)
+        emitter.tell(objectives)
+        
+        # Suivi des performances
+        fits.append(best_agent.fitness)
         total_evals.append(cfg["lambda"] * (gen + 1))
-
-    # Affiche la progression du meilleur fitness
-    plt.plot(total_evals, fits)
-    plt.xlabel("Evaluations")
-    plt.ylabel("Fitness")
-    plt.title("MAP-Elites Progress")
+        
+        bar.set_description(f"Best: {best_agent.fitness:.2f}, Archive: {len(archive)}")
+    
+    env.close()
+    
+    # Visualisation de l'archive
+    data = archive.as_pandas()
+    plt.figure(figsize=(10, 8))
+    plt.scatter(data['index_0'], data['index_1'], c=data['objective'], cmap='viridis', s=40)
+    plt.colorbar(label='Fitness')
+    plt.xlabel("Distance parcourue")
+    plt.ylabel("Hauteur moyenne")
+    plt.title("MAP-Elites Archive")
+    plt.tight_layout()
     plt.show()
-
-    # Renvoyer le meilleur agent
-    best_agent = Agent(Network, cfg, genes=best_genes)
-    best_agent.fitness = best_fitness
+    
     return best_agent
-
-
-
-
+    
+#--------------------------------------------------------------------------------------#s
 @ray.remote
 def evaluate_mapelite_remote(genes, cfg):
+    """Fonction d'évaluation distante pour MAP-Elites"""
     env = make_env(cfg["env_name"], robot=cfg["robot"])
     agent = Agent(Network, cfg, genes=genes)
-    fitness, trajectory = evaluate_with_traj(agent, env, max_steps=cfg["max_steps"])
-    desc = agent.descriptor(trajectory)
+    desc, fitness = walker_descriptors(agent, env, max_steps=cfg["max_steps"])
     env.close()
-    return (fitness, desc, genes)
+    return desc, fitness, genes
 
-def map_elites_parallel(config, n_bins=10, n_init=100, n_iter=500):
+def map_elites_para(config):
+    """Implémentation de MAP-Elites avec parallélisation Ray"""
+
+    
     cfg = get_cfg(config["env_name"], robot=config["robot"])
     cfg = {**config, **cfg}
-
-    def get_cell(desc):
-        d1, d2 = desc
-        b1 = int(np.clip((d1 - 0.6) / 1.0 * n_bins, 0, n_bins - 1))
-        b2 = int(np.clip((d2) / 1.0 * n_bins, 0, n_bins - 1))
-        return (b1, b2)
-
-    archive = {}
-    grid = {}
-
-    # Phase d'initialisation en parallèle
-    initial_agents = [Agent(Network, cfg) for _ in range(n_init)]
-    tasks = [evaluate_mapelite_remote.remote(agent.genes, cfg) for agent in initial_agents]
-    results = ray.get(tasks)
-
-    for fitness, desc, genes in results:
-        cell = get_cell(desc)
-        if cell not in archive or archive[cell].fitness < fitness:
-            agent = Agent(Network, cfg, genes=genes)
-            agent.fitness = fitness
-            archive[cell] = agent
-            grid[cell] = fitness
-
-    # Boucle principale d'évolution
-    for i in tqdm(range(n_iter), desc="MAP-Elites (parallel)"):
-        if len(archive) == 0:
-            continue
-        parents = [np.random.choice(list(archive.values())) for _ in range(cfg["lambda"])]
-        child_genes = [parent.mutate_ga() for parent in parents]
-
-        tasks = [evaluate_mapelite_remote.remote(genes, cfg) for genes in child_genes]
+    
+    # Dimensions des descripteurs
+    x_bounds = (0, 10)  # Distance parcourue
+    h_bounds = (0, 2)   # Hauteur moyenne
+    
+    # Initialisation de l'agent et récupération de la taille du génome
+    initial_agent = Agent(Network, cfg)
+    solution_dim = len(initial_agent.genes)
+    
+    # Création de l'archive
+    archive = GridArchive(
+        solution_dim=solution_dim,
+        dims=[20, 20],
+        ranges=[x_bounds, h_bounds]
+    )
+    
+    # Emetteur pour générer de nouvelles solutions
+    emitter = EvolutionStrategyEmitter(
+        archive,
+        x0=initial_agent.genes,
+        sigma0=cfg["sigma"],
+        batch_size=cfg["lambda"]
+    )
+    
+    # Meilleur agent trouvé
+    best_agent = Agent(Network, cfg)
+    best_agent.fitness = float("-inf")
+    
+    fits = []
+    total_evals = []
+    
+    bar = tqdm(range(cfg["generations"]), desc="MAP-Elites (Ray)")
+    for gen in bar:
+        # Générer de nouvelles solutions
+        solutions = emitter.ask()
+        
+        # Évaluation parallèle avec Ray
+        tasks = [evaluate_mapelite_remote.remote(genes, cfg) for genes in solutions]
         results = ray.get(tasks)
-
-        for fitness, desc, genes in results:
-            cell = get_cell(desc)
-            if cell not in archive or archive[cell].fitness < fitness:
-                agent = Agent(Network, cfg, genes=genes)
-                agent.fitness = fitness
-                archive[cell] = agent
-                grid[cell] = fitness
-
-    # Visualisation
-    fitness_map = np.zeros((n_bins, n_bins))
-    for (i, j), f in grid.items():
-        fitness_map[i, j] = f
-    plt.imshow(fitness_map, origin='lower')
-    plt.colorbar(label="Fitness")
-    plt.title("MAP-Elites Grid (Parallel)")
-    plt.xlabel("Descriptor 1")
-    plt.ylabel("Descriptor 2")
+        
+        # Extraire les résultats
+        descriptors = [desc for desc, _, _ in results]
+        objectives = [fitness for _, fitness, _ in results]
+        genes_list = [genes for _, _, genes in results]
+        
+        # Mettre à jour l'archive et le meilleur agent
+        for i, (solution, objective, desc) in enumerate(zip(solutions, objectives, descriptors)):
+            archive.add(solution, objective, desc)
+            if objective > best_agent.fitness:
+                best_agent.genes = genes_list[i].copy()
+                best_agent.fitness = objective
+        
+        # Informer l'emitter des résultats
+        emitter.tell(objectives)
+        
+        # Suivi des performances
+        fits.append(best_agent.fitness)
+        total_evals.append(cfg["lambda"] * (gen + 1))
+        
+        bar.set_description(f"Best: {best_agent.fitness:.2f}, Archive: {len(archive)}")
+    
+    # Visualisation de l'archive
+    data = archive.as_pandas()
+    plt.figure(figsize=(10, 8))
+    plt.scatter(data['index_0'], data['index_1'], c=data['objective'], cmap='viridis', s=40)
+    plt.colorbar(label='Fitness')
+    plt.xlabel("Distance parcourue")
+    plt.ylabel("Hauteur moyenne")
+    plt.title("MAP-Elites Archive (Parallèle)")
+    plt.tight_layout()
     plt.show()
+    
 
-    best_cell = max(archive.items(), key=lambda x: x[1].fitness)
-    best_agent = best_cell[1]
     return best_agent
 
 
-@ray.remote
-def evaluate_solution_remote(genes, cfg):
-    agent = Agent(Network, cfg, genes=genes)
-    env = make_env(cfg["env_name"], robot=cfg["robot"])
-    obs_start, _ = env.reset()
-    obs = obs_start
-    reward = 0
-    steps = 0
+def walker_descriptors_advanced(agent, env, max_steps=500):
+    """Descripteurs améliorés: distance parcourue et stabilité (écart-type de hauteur)"""
+    obs, _ = env.reset()
+    agent.model.reset()
+    total_reward = 0
     done = False
-
-    while not done and steps < cfg["max_steps"]:
+    steps = 0
+    heights = []
+    x_positions = []
+    
+    while not done and steps < max_steps:
         action = agent.act(obs)
-        obs, r, done, trunc, _ = env.step(action)
-        reward += r
+        obs, r, done, trunc, info = env.step(action)
+        total_reward += r
+        
+        if "robot_com" in info:
+            x_positions.append(info["robot_com"][0])
+            heights.append(info["robot_com"][1])
         steps += 1
+    
+    # Premier descripteur: distance parcourue
+    x_distance = max(x_positions) - min(x_positions) if x_positions else 0
+    
+    # Deuxième descripteur: stabilité (inverse de l'écart-type de la hauteur)
+    # Un écart-type faible signifie une marche stable
+    height_std = np.std(heights) if len(heights) > 1 else 0
+    stability = 1.0 / (1.0 + height_std)  # Normalisation: plus c'est stable, plus c'est proche de 1
+    
+    return np.array([x_distance, stability]), total_reward
 
+def walker_descriptors_expert(agent, env, max_steps=500):
+    """Descripteurs experts: distance et fréquence des pas (oscillations)"""
+    obs, _ = env.reset()
+    agent.model.reset()
+    total_reward = 0
+    done = False
+    steps = 0
+    heights = []
+    x_positions = []
+    
+    while not done and steps < max_steps:
+        action = agent.act(obs)
+        obs, r, done, trunc, info = env.step(action)
+        total_reward += r
+        
+        if "robot_com" in info:
+            x_positions.append(info["robot_com"][0])
+            heights.append(info["robot_com"][1])
+        steps += 1
+    
+    # Distance parcourue
+    x_distance = max(x_positions) - min(x_positions) if x_positions else 0
+    
+    # Fréquence des pas (compter les oscillations verticales)
+    step_frequency = 0
+    if len(heights) > 3:
+        # Détection de pics (maxima locaux)
+        peaks = 0
+        for i in range(1, len(heights)-1):
+            if heights[i] > heights[i-1] and heights[i] > heights[i+1]:
+                peaks += 1
+        step_frequency = peaks / len(heights)  # Normaliser par rapport au temps
+    
+    return np.array([x_distance, step_frequency]), total_reward
+
+
+@ray.remote
+def evaluate_mapelite_advanced_remote(genes, cfg):
+    """Fonction d'évaluation distante pour MAP-Elites avec descripteurs avancés"""
+    env = make_env(cfg["env_name"], robot=cfg["robot"])
+    agent = Agent(Network, cfg, genes=genes)
+    desc, fitness = walker_descriptors_advanced(agent, env, max_steps=cfg["max_steps"])
     env.close()
-    desc = [obs[0] - obs_start[0]]  # Distance horizontale
-    return reward, desc
+    return desc, fitness, genes
 
-def map_elites_pyribs_parallelisation(config):
+def map_elites_para_advanced(config):
+    """Implémentation de MAP-Elites avec parallélisation Ray et descripteurs avancés"""
+
+    
     cfg = get_cfg(config["env_name"], robot=config["robot"])
     cfg = {**config, **cfg}
-
-    sol_dim = len(Agent(Network, cfg).genes)
-
-    archive = CVTArchive(
-        solution_dim=sol_dim,
-        cells=100,
-        ranges=[(0, 5)],
-        samples=10000,
+    
+    # Dimensions des descripteurs
+    x_bounds = (0, 10)  # Distance parcourue
+    stability_bounds = (0, 1)  # Stabilité (normalisation inversée de l'écart-type)
+    
+    # Initialisation de l'agent et récupération de la taille du génome
+    initial_agent = Agent(Network, cfg)
+    solution_dim = len(initial_agent.genes)
+    
+    # Création de l'archive
+    archive = GridArchive(
+        solution_dim=solution_dim,
+        dims=[20, 20],
+        ranges=[x_bounds, stability_bounds]
     )
-
-    emitter = GaussianEmitter(
+    
+    # Emetteur pour générer de nouvelles solutions
+    emitter = EvolutionStrategyEmitter(
         archive,
-        x0=Agent(Network, cfg).genes,
-        sigma=cfg["sigma"],
-        batch_size=cfg["lambda"],
+        x0=initial_agent.genes,
+        sigma0=cfg["sigma"],
+        batch_size=cfg["lambda"]
     )
-
-    best_fitness = -np.inf
-    best_genes = None
+    
+    # Meilleur agent trouvé
+    best_agent = Agent(Network, cfg)
+    best_agent.fitness = float("-inf")
+    
     fits = []
     total_evals = []
-
-    for gen in tqdm(range(cfg["generations"]), desc="MAP-Elites"):
+    
+    bar = tqdm(range(cfg["generations"]), desc="MAP-Elites Avancé (Ray)")
+    for gen in bar:
+        # Générer de nouvelles solutions
         solutions = emitter.ask()
-
-        # Parallélisation des évaluations
-        futures = [evaluate_solution_remote.remote(genes, cfg) for genes in solutions]
-        results = ray.get(futures)
-
-        objectives = []
-        descriptors = []
-
-        for idx, (reward, desc) in enumerate(results):
-            objectives.append(reward)
-            descriptors.append(desc)
-
-            if reward > best_fitness:
-                best_fitness = reward
-                best_genes = solutions[idx]
-
-        archive.add(solutions, objectives, descriptors)
-        add_info = [{} for _ in solutions]
-        emitter.tell(solutions, objectives, descriptors, add_info)
-
-        fits.append(best_fitness)
+        
+        # Évaluation parallèle avec Ray
+        tasks = [evaluate_mapelite_advanced_remote.remote(genes, cfg) for genes in solutions]
+        results = ray.get(tasks)
+        
+        # Extraire les résultats
+        descriptors = [desc for desc, _, _ in results]
+        objectives = [fitness for _, fitness, _ in results]
+        genes_list = [genes for _, _, genes in results]
+        
+        # Mettre à jour l'archive et le meilleur agent
+        for i, (solution, objective, desc) in enumerate(zip(solutions, objectives, descriptors)):
+            archive.add(solution, objective, desc)
+            if objective > best_agent.fitness:
+                best_agent.genes = genes_list[i].copy()
+                best_agent.fitness = objective
+        
+        # Informer l'emitter des résultats
+        emitter.tell(objectives)
+        
+        # Suivi des performances
+        fits.append(best_agent.fitness)
         total_evals.append(cfg["lambda"] * (gen + 1))
-
-    plt.plot(total_evals, fits)
-    plt.xlabel("Evaluations")
-    plt.ylabel("Fitness")
-    plt.title("MAP-Elites Progress")
+        
+        bar.set_description(f"Best: {best_agent.fitness:.2f}, Archive: {len(archive)}")
+    
+    # Visualisation de l'archive
+    data = archive.as_pandas()
+    plt.figure(figsize=(10, 8))
+    plt.scatter(data['index_0'], data['index_1'], c=data['objective'], cmap='viridis', s=40)
+    plt.colorbar(label='Fitness')
+    plt.xlabel("Distance parcourue")
+    plt.ylabel("Stabilité")
+    plt.title("MAP-Elites Archive (Descripteurs Avancés)")
+    plt.tight_layout()
     plt.show()
 
-    best_agent = Agent(Network, cfg, genes=best_genes)
-    best_agent.fitness = best_fitness
+    return best_agent
+
+
+
+@ray.remote
+def evaluate_mapelite_expert_remote(genes, cfg):
+    """Fonction d'évaluation distante pour MAP-Elites avec descripteurs experts"""
+    env = make_env(cfg["env_name"], robot=cfg["robot"])
+    agent = Agent(Network, cfg, genes=genes)
+    desc, fitness = walker_descriptors_expert(agent, env, max_steps=cfg["max_steps"])
+    env.close()
+    return desc, fitness, genes
+
+def map_elites_para_expert(config):
+    """Implémentation de MAP-Elites avec parallélisation Ray et descripteurs experts"""
+    ray.init(ignore_reinit_error=True)  # Initialiser Ray
+    
+    cfg = get_cfg(config["env_name"], robot=config["robot"])
+    cfg = {**config, **cfg}
+    
+    # Dimensions des descripteurs
+    x_bounds = (0, 10)  # Distance parcourue
+    frequency_bounds = (0, 0.5)  # Fréquence des pas (oscillations)
+    
+    # Initialisation de l'agent et récupération de la taille du génome
+    initial_agent = Agent(Network, cfg)
+    solution_dim = len(initial_agent.genes)
+    
+    # Création de l'archive
+    archive = GridArchive(
+        solution_dim=solution_dim,
+        dims=[20, 20],
+        ranges=[x_bounds, frequency_bounds]
+    )
+    
+    # Emetteur pour générer de nouvelles solutions
+    emitter = EvolutionStrategyEmitter(
+        archive,
+        x0=initial_agent.genes,
+        sigma0=cfg["sigma"],
+        batch_size=cfg["lambda"]
+    )
+    
+    # Meilleur agent trouvé
+    best_agent = Agent(Network, cfg)
+    best_agent.fitness = float("-inf")
+    
+    fits = []
+    total_evals = []
+    
+    bar = tqdm(range(cfg["generations"]), desc="MAP-Elites Expert (Ray)")
+    for gen in bar:
+        # Générer de nouvelles solutions
+        solutions = emitter.ask()
+        
+        # Évaluation parallèle avec Ray
+        tasks = [evaluate_mapelite_expert_remote.remote(genes, cfg) for genes in solutions]
+        results = ray.get(tasks)
+        
+        # Extraire les résultats
+        descriptors = [desc for desc, _, _ in results]
+        objectives = [fitness for _, fitness, _ in results]
+        genes_list = [genes for _, _, genes in results]
+        
+        # Mettre à jour l'archive et le meilleur agent
+        for i, (solution, objective, desc) in enumerate(zip(solutions, objectives, descriptors)):
+            archive.add(solution, objective, desc)
+            if objective > best_agent.fitness:
+                best_agent.genes = genes_list[i].copy()
+                best_agent.fitness = objective
+        
+        # Informer l'emitter des résultats
+        emitter.tell(objectives)
+        
+        # Suivi des performances
+        fits.append(best_agent.fitness)
+        total_evals.append(cfg["lambda"] * (gen + 1))
+        
+        bar.set_description(f"Best: {best_agent.fitness:.2f}, Archive: {len(archive)}")
+    
+    # Visualisation de l'archive
+    data = archive.as_pandas()
+    plt.figure(figsize=(10, 8))
+    plt.scatter(data['index_0'], data['index_1'], c=data['objective'], cmap='viridis', s=40)
+    plt.colorbar(label='Fitness')
+    plt.xlabel("Distance parcourue")
+    plt.ylabel("Fréquence des pas")
+    plt.title("MAP-Elites Archive (Descripteurs Experts)")
+    plt.tight_layout()
+    plt.show()
+    
+    ray.shutdown()  # Arrêter Ray proprement
     return best_agent

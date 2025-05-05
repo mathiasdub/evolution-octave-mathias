@@ -86,41 +86,23 @@ if algo == "CMA_ES":
     env.close()
 
 
-if algo == "MAP_Elites":
-    config = {
-        "env_name": "Walker-v0",
-        "robot": walker,
-        "generations": 200,
-        "lambda":10,
-        "max_steps": 500,
-    }
-    cfg = get_cfg(config["env_name"], robot=config["robot"])
-    cfg = {**config, **cfg}
-    n_iter = config["generations"] * config["lambda"]
-
-
-    a = map_elites(config, n_bins=20, n_init=100, n_iter=n_iter)
-    save_solution(a, cfg, "solution_map_elites.json")
-
-    print("Best fitness from MAP-Elites:", a.fitness)
-
-    env = make_env(config["env_name"], robot=config["robot"])
-    evaluate(a, env, render=False)
-    env.close()
-
-
 if algo == "MAP_ELITES_PYRIBS":
     config = {
         "env_name": "Walker-v0",
         "robot": walker,
         "generations": 200,
         "lambda": 10,
-        "sigma": 3,
+        "sigma": 0.1,  # Ajout du sigma pour l'ES emitter
         "max_steps": 500,
     }
+    cfg = get_cfg(config["env_name"], robot=config["robot"])
+    cfg = {**config, **cfg}
 
-    a = map_elites_pyribs(config)
-    save_solution(a, config, "solution_map_elites_pyribs.json")
+    a = map_elites_sans_para(config) 
+    save_solution(a, cfg, "solution_map_elites_custom.json")
+
+    print("Best fitness from MAP-Elites:", a.fitness)
+
     env = make_env(config["env_name"], robot=config["robot"])
     evaluate(a, env, render=False)
     env.close()
