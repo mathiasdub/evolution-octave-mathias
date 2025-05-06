@@ -17,23 +17,29 @@ def make_env(env_name, robot, seed=None, **kwargs):
     return env
 
 
-def evaluate(agent, env, max_steps=498, render=False):
+def evaluate(agent, env, max_steps=500, render=False):
     obs, i = env.reset()
     agent.model.reset()
     reward = 0
     steps = 0
     done = False
+    if render:
+        imgs = []
     while not done and steps < max_steps:
         if render:
-            env.render()
+            img=env.render()
+            imgs.append(img)
         action = agent.act(obs)
         obs, r, done, trunc, _ = env.step(action)
         reward += r
         steps += 1
+    if render:
+        return reward, imgs
     return reward
 
 
 def get_cfg(env_name, robot):
+
     env = make_env(env_name, robot)
     cfg = {
         "n_in": env.observation_space.shape[0],

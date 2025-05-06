@@ -1,11 +1,19 @@
 from  algos import*
+import os
+from gymnasium.wrappers import RecordVideo
+import imageio.v2 as imageio  # Compatible avec imageio>=2.9
+import sys
+
+
+
 #algo='one_plus_lambda'
-#algo="ES"
-algo="CMA_ES"
+algo="ES"
+#algo="CMA_ES"
+#algo="MAP_Elites"
 
 walker = np.array([
     [3, 3, 3, 3, 3],
-    [3, 3, 3, 0, 3],
+    [3, 0, 0, 0, 3],
     [3, 3, 0, 3, 3],
     [3, 3, 0, 3, 3],
     [3, 3, 0, 3, 3]
@@ -24,21 +32,21 @@ if algo=='one_plus_lambda':
     cfg = {**config, **cfg} # Merge configs
 
     a = one_plus_lambda(config)
-    save_solution(a, cfg)
+    save_solution(a, cfg, "onepluslmabda_100_10.json")
     a.fitness
 
 
 
     env = make_env(env_name=config["env_name"], robot=config["robot"])
-    evaluate(a, env, render=False)
-    env.close()
+    
     
     
 if algo=="ES":
-    config = {    "env_name": "Walker-v0",
+    config = {    
+        "env_name": "Walker-v0",
         "robot": walker,
-        "generations": 500, # to change: increase!
-        "lambda": 20, # Population size
+        "generations": 100, # to change: increase!
+        "lambda": 10, # Population size
         "mu": 5, # Parents pop size
         "sigma": 0.1, # mutation std
         "lr": 1, # Learning rate
@@ -48,7 +56,7 @@ if algo=="ES":
     cfg = {**config, **cfg} # Merge configs
 
     a = ES(config)
-    save_solution(a, cfg)
+    save_solution(a, cfg, "es_100_10.json")
     a.fitness
 
 
@@ -62,60 +70,40 @@ if algo == "CMA_ES":
     config = {
         "env_name": "Walker-v0",
         "robot": walker,
-        "generations": 10,
-        "lambda": 10,  # CMA-ES population size
-        "sigma": 0.5,  # Initial mutation std
+        "generations": 500,
+        "lambda":20,  # CMA-ES population size
+        "sigma": 2,  # Initial mutation std
         "max_steps": 500,
     }
     cfg = get_cfg(config["env_name"], robot=config["robot"])
     cfg = {**config, **cfg}
 
     a = CMA_ES(config)
-    save_solution(a, cfg)
-
+    save_solution(a, cfg,"walkerv2_avec_para_500_20_2.json")
+    a.fitness
+    
     env = make_env(config["env_name"], robot=config["robot"])
     evaluate(a, env, render=False)
     env.close()
 
 
+if algo == "MAP_Elites":
+    config = {
+        "env_name": "Walker-v0",
+        "robot": walker,
+        "generations": 3,
+        "lambda": 3,  # nombre de solutions par génération
+        "sigma": 0.5,
+        "max_steps": 500,
+    }
+    cfg = get_cfg(config["env_name"], robot=config["robot"])
+    cfg = {**config, **cfg}
 
+    a = MAP_Elites(config)
+    agent_data = {
+        "genes": a.genes.tolist(),  # convertit le tableau numpy en liste
+        "fitness": a.fitness
+    }
 
-np.save("Walker.npy", a.genes)
-
-# load weights
-
-config = {
-    "env_name": "Walker-v0",
-    "robot": walker,
-    "generations": 100,
-    "lambda": 10, # Population size
-    "mu": 5, # Parents pop size
-    "sigma": 0.1, # mutation std
-    "lr": 1, # Learning rate
-    "max_steps": 497,
-}
-
-
-a = Agent(Network, cfg)
-a.genes = np.load("Walker.npy")
-
-
-env = make_env(cfg["env_name"], robot=cfg["robot"])
-a.fitness = evaluate(a, env, render=False)
-env.close()
-print(a.fitness)
-
-
-
-
-
-
-
-save_solution(a, cfg)
-
-a = load_solution(name="solution.json")
-cfg = a.config
-env = make_env(cfg["env_name"], robot=cfg["robot"])
-a.fitness = evaluate(a, env, render=False)
-env.close()
-print(a.fitness)
+    with open("best_agent.json", "w") as f:
+        json.dump(agent_data, f, indent=4)
