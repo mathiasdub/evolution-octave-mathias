@@ -36,7 +36,7 @@ if robot=="thrower":
         "generations": 200,
         "lambda":50,  # CMA-ES population size
         "sigma": 4,  # Initial mutation std
-        "max_steps": 500,
+        "max_steps": 300,
     }
 elif robot=="climber":
     config = {
